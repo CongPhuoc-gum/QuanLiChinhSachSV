@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Laravel\Sanctum\HasApiTokens;
 
 /**
  * NguoiDung Model
@@ -15,6 +16,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  */
 class NguoiDung extends Model
 {
+    use HasApiTokens;
+
     public $timestamps = false;
     protected $primaryKey = 'MaNguoiDung';
     protected $table = 'NGUOI_DUNG';
