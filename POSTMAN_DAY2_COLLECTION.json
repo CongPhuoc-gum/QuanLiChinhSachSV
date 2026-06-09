@@ -1,0 +1,326 @@
+{
+    "info": {
+        "name": "QUANLICS Day 2 - JSON FormData & Cloudinary Upload",
+        "description": "Collection for Day 2: Số hóa Biểu mẫu JSON (BM.01/BM.02) + Upload Minh Chứng Cloudinary",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "item": [
+        {
+            "name": "Authentication",
+            "item": [
+                {
+                    "name": "Login",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"email\": \"sv001@example.com\",\n  \"password\": \"password\"\n}"
+                        },
+                        "url": {
+                            "raw": "http://localhost:8000/api/login",
+                            "protocol": "http",
+                            "host": [
+                                "localhost"
+                            ],
+                            "port": "8000",
+                            "path": [
+                                "api",
+                                "login"
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Hồ Sơ - Day 2",
+            "item": [
+                {
+                    "name": "1. POST - Nộp Hồ Sơ Mới BM.01 (MGHP) + Minh Chứng",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{access_token}}"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "formdata",
+                            "formdata": [
+                                {
+                                    "key": "ma_loai_cs",
+                                    "value": "1",
+                                    "type": "text",
+                                    "description": "1=MGHP(BM.01), 2=TCXH(BM.02)"
+                                },
+                                {
+                                    "key": "ma_dot",
+                                    "value": "1",
+                                    "type": "text",
+                                    "description": "ID của đợt thu hồ sơ"
+                                },
+                                {
+                                    "key": "form_data",
+                                    "value": "{\"ho_ten\":\"Nguyễn Văn A\",\"ma_so_sv\":\"20210001\",\"dien_thoai\":\"0901234567\",\"trang_thai_ho_gia_dinh\":\"hộ_nghèo\",\"ghi_chu\":\"Gia đình khó khăn cần hỗ trợ\"}",
+                                    "type": "text",
+                                    "description": "JSON schema cho BM.01: ho_ten, ma_so_sv, dien_thoai, trang_thai_ho_gia_dinh (hộ_nghèo|cận_nghèo|hộ_chính_sách)"
+                                },
+                                {
+                                    "key": "minh_chungs",
+                                    "type": "file",
+                                    "src": [],
+                                    "description": "Tải ảnh CCCD (JPEG/PNG, max 5MB)"
+                                },
+                                {
+                                    "key": "minh_chungs",
+                                    "type": "file",
+                                    "src": [],
+                                    "description": "Tải ảnh Sổ hộ nghèo (JPEG/PNG, max 5MB)"
+                                }
+                            ]
+                        },
+                        "url": {
+                            "raw": "http://localhost:8000/api/ho-so/store",
+                            "protocol": "http",
+                            "host": [
+                                "localhost"
+                            ],
+                            "port": "8000",
+                            "path": [
+                                "api",
+                                "ho-so",
+                                "store"
+                            ]
+                        },
+                        "description": "Nộp hồ sơ mới BM.01 (MGHP) kèm minh chứng (multipart/form-data)\n\nResponse:\n{\n  \"success\": true,\n  \"data\": {\n    \"ma_ho_so\": 1,\n    \"ma_loai_cs\": 1,\n    \"ma_trang_thai\": 2,\n    \"du_lieu_form\": {...},\n    \"minh_chungs\": [...]\n  },\n  \"message\": \"Nộp hồ sơ thành công...\"\n}"
+                    }
+                },
+                {
+                    "name": "2. POST - Nộp Hồ Sơ Mới BM.02 (TCXH) + Minh Chứng",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{access_token}}"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "formdata",
+                            "formdata": [
+                                {
+                                    "key": "ma_loai_cs",
+                                    "value": "2",
+                                    "type": "text",
+                                    "description": "2=TCXH(BM.02)"
+                                },
+                                {
+                                    "key": "ma_dot",
+                                    "value": "1",
+                                    "type": "text"
+                                },
+                                {
+                                    "key": "form_data",
+                                    "value": "{\"ho_ten\":\"Trần Thị B\",\"ma_so_sv\":\"20210002\",\"dien_thoai\":\"0912345678\",\"dien_thoai_phu\":\"0987654321\",\"so_tai_khoan_ngan_hang\":\"1234567890\",\"ten_ngan_hang\":\"Ngân hàng Vietcombank\",\"ghi_chu\":\"Cần hỗ trợ xã hội\"}",
+                                    "type": "text",
+                                    "description": "JSON schema cho BM.02: ho_ten, ma_so_sv, dien_thoai, dien_thoai_phu, so_tai_khoan_ngan_hang, ten_ngan_hang"
+                                },
+                                {
+                                    "key": "minh_chungs",
+                                    "type": "file",
+                                    "src": [],
+                                    "description": "Ảnh CCCD"
+                                },
+                                {
+                                    "key": "minh_chungs",
+                                    "type": "file",
+                                    "src": [],
+                                    "description": "Ảnh Giấy tờ xác nhận hộ chính sách"
+                                }
+                            ]
+                        },
+                        "url": {
+                            "raw": "http://localhost:8000/api/ho-so/store",
+                            "protocol": "http",
+                            "host": [
+                                "localhost"
+                            ],
+                            "port": "8000",
+                            "path": [
+                                "api",
+                                "ho-so",
+                                "store"
+                            ]
+                        },
+                        "description": "Nộp hồ sơ BM.02 (TCXH) - Trợ cấp xã hội"
+                    }
+                },
+                {
+                    "name": "3. GET - Danh Sách Hồ Sơ (Phân Trang)",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{access_token}}"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "http://localhost:8000/api/ho-so?page=1",
+                            "protocol": "http",
+                            "host": [
+                                "localhost"
+                            ],
+                            "port": "8000",
+                            "path": [
+                                "api",
+                                "ho-so"
+                            ],
+                            "query": [
+                                {
+                                    "key": "page",
+                                    "value": "1"
+                                }
+                            ]
+                        },
+                        "description": "Lấy danh sách hồ sơ của sinh viên (phân trang, 10 items/trang)"
+                    }
+                },
+                {
+                    "name": "4. GET - Chi Tiết Hồ Sơ",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{access_token}}"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "http://localhost:8000/api/ho-so/1",
+                            "protocol": "http",
+                            "host": [
+                                "localhost"
+                            ],
+                            "port": "8000",
+                            "path": [
+                                "api",
+                                "ho-so",
+                                "1"
+                            ]
+                        },
+                        "description": "Lấy chi tiết hồ sơ (ID=1) kèm danh sách minh chứng và kết quả phân tích AI"
+                    }
+                },
+                {
+                    "name": "5. POST - Thêm Minh Chứng Bổ Sung",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{access_token}}"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "formdata",
+                            "formdata": [
+                                {
+                                    "key": "minh_chungs",
+                                    "type": "file",
+                                    "src": [],
+                                    "description": "File ảnh bổ sung (JPEG/PNG, max 5MB)"
+                                }
+                            ]
+                        },
+                        "url": {
+                            "raw": "http://localhost:8000/api/ho-so/1/minh-chung-them",
+                            "protocol": "http",
+                            "host": [
+                                "localhost"
+                            ],
+                            "port": "8000",
+                            "path": [
+                                "api",
+                                "ho-so",
+                                "1",
+                                "minh-chung-them"
+                            ]
+                        },
+                        "description": "Thêm minh chứng bổ sung cho hồ sơ ID=1"
+                    }
+                },
+                {
+                    "name": "6. DELETE - Xóa Minh Chứng",
+                    "request": {
+                        "method": "DELETE",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{access_token}}"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "http://localhost:8000/api/ho-so/1/minh-chung/5",
+                            "protocol": "http",
+                            "host": [
+                                "localhost"
+                            ],
+                            "port": "8000",
+                            "path": [
+                                "api",
+                                "ho-so",
+                                "1",
+                                "minh-chung",
+                                "5"
+                            ]
+                        },
+                        "description": "Xóa minh chứng ID=5 từ hồ sơ ID=1"
+                    }
+                }
+            ]
+        }
+    ],
+    "variable": [
+        {
+            "key": "access_token",
+            "value": "your_bearer_token_here",
+            "type": "string"
+        }
+    ]
+}

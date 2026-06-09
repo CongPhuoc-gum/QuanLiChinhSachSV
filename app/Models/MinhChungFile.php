@@ -2,30 +2,36 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Model;
 
 /**
  * MinhChungFile Model
- * 
- * File minh chứng hồ sơ lưu trên Cloudinary
+ *
+ * File minh chứng hồ sơ lưu trên Cloudinary (DAY 2)
+ * Fields: MaMinhChung, MaHoSo, TenFile, DuongDanFile (URL), PublicIdCloudinary, KichThuoc, KieuFile, ThoiGianUpload
  */
 class MinhChungFile extends Model
 {
     public $timestamps = false;
     protected $primaryKey = 'MaMinhChung';
     protected $table = 'MINH_CHUNG_FILE';
+
     protected $fillable = [
         'MaHoSo',
-        'MaLoaiGiayTo',
-        'URL_Cloudinary',
-        'PublicId',
+        'TenFile',
+        'DuongDanFile',
+        'PublicIdCloudinary',
+        'KichThuoc',
+        'KieuFile',
+        'ThoiGianUpload',
     ];
 
     protected function casts(): array
     {
         return [
-            'NgayTaiLen' => 'datetime',
+            'ThoiGianUpload' => 'datetime',
+            'KichThuoc' => 'integer',
         ];
     }
 
@@ -35,13 +41,5 @@ class MinhChungFile extends Model
     public function hoSo(): BelongsTo
     {
         return $this->belongsTo(HoSo::class, 'MaHoSo', 'MaHoSo');
-    }
-
-    /**
-     * Relationship: Một minh chứng file thuộc một loại giấy tờ
-     */
-    public function loaiGiayTo(): BelongsTo
-    {
-        return $this->belongsTo(LoaiGiayTo::class, 'MaLoaiGiayTo', 'MaLoaiGiayTo');
     }
 }
