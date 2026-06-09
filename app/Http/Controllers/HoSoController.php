@@ -5,8 +5,10 @@ namespace App\Http\Controllers;
 use App\Models\HoSo;
 use App\Models\LoaiChinhSach;
 use App\Models\MinhChungFile;
+use App\Models\PhanTichAIHoSo;
 use App\Models\TrangThai;
 use App\Services\CloudinaryService;
+use App\Services\ComparisonService;
 use App\Services\GeminiService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -419,6 +421,193 @@ class HoSoController extends Controller
                 'success' => false,
                 'message' => 'Lỗi xóa minh chứng'
             ], 500);
+        }
+    }
+
+    /**
+     * DAY 3: POST /api/ho-so/{maHoSo}/process-ocr
+     *
+     * Kích hoạt quá trình xử lý OCR cho hồ sơ
+     * - Đọc tất cả minh chứng từ Cloudinary
+     * - Gọi Gemini Vision OCR cho mỗi ảnh
+     * - So khớp với form_data
+     * - Tự động cập nhật trạng thái hồ sơ
+     *
+     * Request: { "process_all": false }
+     * Response: { "success": true, "analysis_results": [...] }
+     */
+    public function processOcr($maHoSo, ComparisonService $comparisonService)
+    {
+        try {
+            $user = Auth::user();
+
+            // Kiểm tra quyền (chỉ cán bộ CTSV hoặc admin)
+            // Có thể bổ sung middleware kiểm tra role
+
+            $hoSo = HoSo::findOrFail($maHoSo);
+
+            // Lấy tất cả minh chứng của hồ sơ
+            $minhChungs = MinhChungFile::where('MaHoSo', $maHoSo)
+                ->get();
+
+            if ($minhChungs->isEmpty()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Hồ sơ không có minh chứng để xử lý OCR'
+                ], 400);
+            }
+
+            // Thực hiện xử lý OCR trong transaction
+            $analysisResults = DB::transaction(function () use ($maHoSo, $minhChungs, $hoSo, $comparisonService) {
+                $results = [];
+
+                // Xử lý OCR cho mỗi minh chứng
+                foreach ($minhChungs as $index => $minhChung) {
+                    Log::info("Processing OCR for MinhChung: {$minhChung->MaMinhChung}");
+
+                    // 1. Gọi Gemini Vision OCR
+                    $ocrResult = $this->geminiService->ocrDocument(
+                        $minhChung->DuongDanFile,
+                        $this->detectDocumentType($minhChung->TenFile)
+                    );
+
+                    if (!$ocrResult['success']) {
+                        Log::warning("OCR failed for: {$minhChung->MaMinhChung}", $ocrResult);
+                        continue;
+                    }
+
+                    // 2. So khớp với form_data
+                    $comparisonResult = $comparisonService->compareOcrWithForm(
+                        $ocrResult['data'],
+                        $hoSo->du_lieu_form ?? []
+                    );
+
+                    // 3. Lưu kết quả vào PHAN_TICH_AI_HO_SO
+                    $analysis = PhanTichAIHoSo::create([
+                        'MaHoSo' => $maHoSo,
+                        'LoaiTaiLieuOCR' => $this->detectDocumentType($minhChung->TenFile),
+                        'URLAnh' => $minhChung->DuongDanFile,
+                        'KetQuaDoiChieu' => $comparisonResult,
+                        'TyLeKhop' => $comparisonResult['overall_match_rate'] ?? 0,
+                        'DoTinCayOCR' => $ocrResult['confidence'] ?? 0.8,
+                        'CanBaoLech' => $comparisonResult['discrepancies'] ?? [],
+                        'ThoiGianPhanTich' => now(),
+                        'TrangThaiXuLy' => $comparisonResult['status'] ?? 'PENDING',
+                    ]);
+
+                    $results[] = [
+                        'ma_minh_chung' => $minhChung->MaMinhChung,
+                        'ma_phan_tich' => $analysis->MaPhanTich,
+                        'ty_le_khop' => $analysis->TyLeKhop,
+                        'trang_thai' => $analysis->TrangThaiXuLy,
+                        'khuyến_nghị' => $comparisonResult['recommendation'] ?? ''
+                    ];
+
+                    Log::info('OCR Processing Result', $results[count($results) - 1]);
+                }
+
+                return $results;
+            });
+
+            // 4. Tự động cập nhật trạng thái hồ sơ dựa trên kết quả
+            $this->autoUpdateHoSoStatus($hoSo, $analysisResults);
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'ma_ho_so' => $maHoSo,
+                    'analysis_count' => count($analysisResults),
+                    'analysis_results' => $analysisResults,
+                ],
+                'message' => 'Xử lý OCR hoàn thành thành công'
+            ], 200);
+        } catch (Exception $e) {
+            Log::error('HoSoController::processOcr - Error: ' . $e->getMessage(), [
+                'ma_ho_so' => $maHoSo,
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Lỗi xử lý yêu cầu'
+            ], 500);
+        }
+    }
+
+    /** ==================== PRIVATE HELPER METHODS ==================== */
+
+    /**
+     * Phát hiện loại giấy tờ từ tên file
+     */
+    private function detectDocumentType(string $filename): string
+    {
+        $lower = strtolower($filename);
+
+        if (strpos($lower, 'cccd') !== false || strpos($lower, 'căn cước') !== false) {
+            return 'cccd';
+        } elseif (strpos($lower, 'hộ khẩu') !== false || strpos($lower, 'ho_khau') !== false) {
+            return 'ho_khau';
+        } elseif (strpos($lower, 'hộ nghèo') !== false || strpos($lower, 'ho_ngheo') !== false) {
+            return 'ho_ngheo';
+        } elseif (strpos($lower, 'khai sinh') !== false || strpos($lower, 'khai_sinh') !== false) {
+            return 'khai_sinh';
+        }
+
+        return 'cccd';  // Mặc định
+    }
+
+    /**
+     * Tự động cập nhật trạng thái hồ sơ dựa trên kết quả OCR
+     */
+    private function autoUpdateHoSoStatus(HoSo $hoSo, array $analysisResults): void
+    {
+        if (empty($analysisResults)) {
+            return;
+        }
+
+        // Phân tích tất cả kết quả
+        $allApproved = true;
+        $hasWarning = false;
+        $hasError = false;
+
+        foreach ($analysisResults as $result) {
+            $status = $result['trang_thai'] ?? '';
+            if ($status === 'NEED_REVIEW') {
+                $hasError = true;
+                $allApproved = false;
+            } elseif ($status === 'WARNING') {
+                $hasWarning = true;
+                $allApproved = false;
+            }
+        }
+
+        // Cập nhật trạng thái hồ sơ
+        if ($allApproved && count($analysisResults) > 0) {
+            // Tất cả APPROVED → tự động chuyển sang "Chờ duyệt từ cấp trên"
+            $hoSo->update([
+                'MaTrangThai' => 4,  // 4 = Chờ Trưởng phòng duyệt
+                'GhiChu' => 'Tự động duyệt từ OCR AI - Tất cả minh chứng hợp lệ'
+            ]);
+
+            Log::info('HoSoController::autoUpdateHoSoStatus - Auto Approved', [
+                'ma_ho_so' => $hoSo->MaHoSo
+            ]);
+        } elseif ($hasError) {
+            // Có sai lệch → quay lại "Đang bổ sung"
+            $hoSo->update([
+                'MaTrangThai' => 3,  // 3 = Đang bổ sung
+                'GhiChu' => 'Phát hiện sai lệch trong OCR - Yêu cầu bổ sung minh chứng'
+            ]);
+
+            Log::info('HoSoController::autoUpdateHoSoStatus - Need Review', [
+                'ma_ho_so' => $hoSo->MaHoSo
+            ]);
+        } elseif ($hasWarning) {
+            // Có cảnh báo → để "Chờ thẩm định"
+            // Cán bộ xem xét chi tiết trước khi duyệt
+            Log::info('HoSoController::autoUpdateHoSoStatus - Warning', [
+                'ma_ho_so' => $hoSo->MaHoSo
+            ]);
         }
     }
 

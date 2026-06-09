@@ -240,39 +240,76 @@ class GeminiService
 
                 $url = "{$this->endpoint}/{$this->visionModel}:generateContent?key={$this->apiKey}";
 
-                // Nếu là URL trực tiếp
+                // Nếu là URL trực tiếp (Cloudinary)
                 if (filter_var($imageUrl, FILTER_VALIDATE_URL)) {
-                    $imageData = [
-                        'url' => $imageUrl
+                    $imagePart = [
+                        'text' => $prompt
                     ];
+
+                    // Tải ảnh từ URL và convert sang base64
+                    try {
+                        $imageResponse = Http::timeout(15)->get($imageUrl);
+                        if ($imageResponse->successful()) {
+                            $base64Image = base64_encode($imageResponse->body());
+                            $mimeType = $imageResponse->header('Content-Type') ?? 'image/jpeg';
+
+                            $payload = [
+                                'contents' => [
+                                    [
+                                        'role' => 'user',
+                                        'parts' => [
+                                            [
+                                                'text' => $prompt
+                                            ],
+                                            [
+                                                'inline_data' => [
+                                                    'mime_type' => $mimeType,
+                                                    'data' => $base64Image
+                                                ]
+                                            ]
+                                        ]
+                                    ]
+                                ],
+                                'generationConfig' => [
+                                    'temperature' => 0,
+                                    'topP' => 0.95,
+                                    'maxOutputTokens' => 500
+                                ]
+                            ];
+                        } else {
+                            throw new Exception('Failed to fetch image from URL');
+                        }
+                    } catch (Exception $e) {
+                        Log::warning("Failed to load image from URL: {$imageUrl}, retrying...");
+                        sleep(2);
+                        continue;
+                    }
                 } else {
                     // Nếu là base64
-                    $imageData = [
-                        'data' => $imageUrl,
-                        'mimeType' => 'image/jpeg'
-                    ];
-                }
-
-                $payload = [
-                    'contents' => [
-                        [
-                            'role' => 'user',
-                            'parts' => [
-                                [
-                                    'text' => $prompt
-                                ],
-                                [
-                                    'inline_data' => $imageData
+                    $payload = [
+                        'contents' => [
+                            [
+                                'role' => 'user',
+                                'parts' => [
+                                    [
+                                        'text' => $prompt
+                                    ],
+                                    [
+                                        'inline_data' => [
+                                            'mime_type' => 'image/jpeg',
+                                            'data' => $imageUrl
+                                        ]
+                                    ]
                                 ]
                             ]
+                        ],
+                        'generationConfig' => [
+                            'temperature' => 0,
+                            'topP' => 0.95,
+                            'maxOutputTokens' => 500
                         ]
-                    ],
-                    'generationConfig' => [
-                        'temperature' => 0,
-                        'topP' => 0.95,
-                        'maxOutputTokens' => 500
-                    ]
-                ];
+                    ];
+                }
 
                 $response = Http::timeout($this->timeout)
                     ->post($url, $payload);
