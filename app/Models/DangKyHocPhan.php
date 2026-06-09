@@ -2,15 +2,15 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Model;
 
 /**
  * DangKyHocPhan Model
- * 
+ *
  * Trung gian SINH_VIEN ↔ LICH_SU_TKB
  * IsHocLai được trigger TRG_KiemTraHocLai tự động cập nhật
- * 
+ *
  * Logic 'Học lại': Trigger kiểm tra nếu sinh viên đã từng đăng ký
  * cùng MaHP (môn học chuẩn) ở bất kỳ lớp nào trước đó
  */
@@ -19,12 +19,16 @@ class DangKyHocPhan extends Model
     public $timestamps = false;
     protected $primaryKey = 'MaDangKy';
     protected $table = 'DANG_KY_HOC_PHAN';
+
     protected $fillable = [
         'MaSinhVien',
         'MaTKB',
         'IsHocLai',
         'DiemThi',
         'KetQua',
+        'MaNguoiDung',
+        'NgayDangKy',
+        'NguonNhap',
     ];
 
     protected function casts(): array
@@ -43,6 +47,14 @@ class DangKyHocPhan extends Model
     public function sinhVien(): BelongsTo
     {
         return $this->belongsTo(SinhVien::class, 'MaSinhVien', 'MaNguoiDung');
+    }
+
+    /**
+     * Relationship: Một đăng ký học phần thuộc một người dùng
+     */
+    public function nguoiDung(): BelongsTo
+    {
+        return $this->belongsTo(NguoiDung::class, 'MaNguoiDung', 'MaNguoiDung');
     }
 
     /**
