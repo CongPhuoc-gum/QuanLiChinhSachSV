@@ -2,45 +2,32 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Model;
 
-/**
- * PhienChatAI Model
- * 
- * Phiên hội thoại với AI chatbot
- */
 class PhienChatAI extends Model
 {
-    public $timestamps = false;
+    protected $table = 'phien_chat_ai';
     protected $primaryKey = 'MaPhien';
-    protected $table = 'PHIEN_CHAT_AI';
+    public $timestamps = false;
+
     protected $fillable = [
         'MaNguoiDung',
+        'ThoiGianBatDau',
+        'ThoiGianKetThuc',
         'DiemDanhGia',
-        'GhiChuDanhGia',
+        'GhiChuDanhGia'
     ];
 
-    protected function casts(): array
-    {
-        return [
-            'ThoiGianBatDau' => 'datetime',
-            'ThoiGianKetThuc' => 'datetime',
-            'DiemDanhGia' => 'integer',
-        ];
-    }
+    protected $casts = [
+        'ThoiGianBatDau' => 'datetime',
+        'ThoiGianKetThuc' => 'datetime',
+        'DiemDanhGia' => 'integer'
+    ];
 
     /**
-     * Relationship: Một phiên chat thuộc một người dùng
-     */
-    public function nguoiDung(): BelongsTo
-    {
-        return $this->belongsTo(NguoiDung::class, 'MaNguoiDung', 'MaNguoiDung');
-    }
-
-    /**
-     * Relationship: Một phiên chat có nhiều tin nhắn
+     * Mối quan hệ: Một phiên chat có nhiều tin nhắn
      */
     public function tinNhans(): HasMany
     {
@@ -48,26 +35,10 @@ class PhienChatAI extends Model
     }
 
     /**
-     * Scope: Lấy các phiên chat đang diễn ra
+     * Mối quan hệ: Phiên chat thuộc một người dùng (sinh viên)
      */
-    public function scopeDangDienRa($query)
+    public function nguoiDung(): BelongsTo
     {
-        return $query->whereNull('ThoiGianKetThuc');
-    }
-
-    /**
-     * Scope: Lấy các phiên chat đã kết thúc
-     */
-    public function scopeDaKetThuc($query)
-    {
-        return $query->whereNotNull('ThoiGianKetThuc');
-    }
-
-    /**
-     * Scope: Lấy các phiên chat có đánh giá
-     */
-    public function scopeCoDanhGia($query)
-    {
-        return $query->whereNotNull('DiemDanhGia');
+        return $this->belongsTo(NguoiDung::class, 'MaNguoiDung', 'MaNguoiDung');
     }
 }

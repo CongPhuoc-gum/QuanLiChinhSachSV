@@ -2,14 +2,14 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Model;
 
 /**
  * HoSo Model
- * 
+ *
  * Đơn đăng ký chính sách (BM.01 hoặc BM.02)
  * Trạng thái: 1=Chờ nộp | 2=Chờ thẩm định | 3=Đang bổ sung | 4=Chờ TP duyệt
  *            5=Chờ BGH duyệt | 6=Đã duyệt | 7=Đã chi trả | 8=Từ chối | 9=Đã hủy
@@ -19,6 +19,7 @@ class HoSo extends Model
     public $timestamps = false;
     protected $primaryKey = 'MaHoSo';
     protected $table = 'HO_SO';
+
     protected $fillable = [
         'MaNguoiDung',
         'MaDot',
