@@ -2,13 +2,13 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Model;
 
 /**
  * TinNhanAI Model
- * 
+ *
  * Tin nhắn trong phiên hội thoại AI
  * VaiTro: 'user' | 'assistant' | 'system'
  */
@@ -17,10 +17,12 @@ class TinNhanAI extends Model
     public $timestamps = false;
     protected $primaryKey = 'MaTinNhan';
     protected $table = 'TIN_NHAN_AI';
+
     protected $fillable = [
         'MaPhien',
         'VaiTro',
         'NoiDung',
+        'ThoiGian',
         'TokenSuDung',
     ];
 
@@ -45,14 +47,15 @@ class TinNhanAI extends Model
      */
     public function triThucAIs(): BelongsToMany
     {
-        return $this->belongsToMany(
-            KhoTriThucAI::class,
-            'TRICH_DAN_TIN_NHAN_AI',
-            'MaTinNhan',
-            'MaTriThuc'
-        )
-        ->withPivot('DiemTuongDong', 'ThuTuUuTien')
-        ->using(TrichDanTinNhanAI::class);
+        return $this
+            ->belongsToMany(
+                KhoTriThucAI::class,
+                'TRICH_DAN_TIN_NHAN_AI',
+                'MaTinNhan',
+                'MaTriThuc'
+            )
+            ->withPivot('DiemTuongDong', 'ThuTuUuTien')
+            ->using(TrichDanTinNhanAI::class);
     }
 
     /**
