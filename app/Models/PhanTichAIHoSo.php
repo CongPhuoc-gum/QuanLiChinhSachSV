@@ -2,33 +2,41 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Model;
 
 /**
- * PhanTichAIHoSo Model
- * 
- * Kết quả AI gợi ý mức hưởng thụ khi cán bộ mở hồ sơ
- * Kết nối: KHO_TRI_THUC_AI ↔ HO_SO
- * Cán bộ mở hồ sơ → AI gợi ý mức hưởng → Cán bộ xem xét áp dụng
+ * PhanTichAIHoSo Model - DAY 3
+ *
+ * Kết quả OCR & So khớp từ Gemini Vision
+ * Lưu trữ toàn bộ kết quả phân tích OCR, tỷ lệ khớp, cảnh báo
  */
 class PhanTichAIHoSo extends Model
 {
     public $timestamps = false;
     protected $primaryKey = 'MaPhanTich';
     protected $table = 'PHAN_TICH_AI_HO_SO';
+
     protected $fillable = [
         'MaHoSo',
-        'MaTriThuc',
-        'MucHuongGoiY',
-        'NoiDungGoiY',
-        'DoTinCay',
+        'KetQuaDoiChieu',
+        'TyLeKhop',
+        'CanBaoLech',
+        'ThoiGianPhanTich',
+        'LoaiTaiLieuOCR',
+        'URLAnh',
+        'DoTinCayOCR',
+        'TrangThaiXuLy',
+        'GhiChuAdmin',
     ];
 
     protected function casts(): array
     {
         return [
-            'DoTinCay' => 'decimal:3',
+            'KetQuaDoiChieu' => 'array',  // JSON từ Gemini + so khớp
+            'TyLeKhop' => 'float',  // 0.0 - 1.0
+            'DoTinCayOCR' => 'float',
+            'CanBaoLech' => 'array',  // Array discrepancies
             'ThoiGianPhanTich' => 'datetime',
         ];
     }
@@ -42,34 +50,26 @@ class PhanTichAIHoSo extends Model
     }
 
     /**
-     * Relationship: Một phân tích AI dựa trên một chunk tri thức
+     * Scope: Lấy các phân tích hợp lệ (khớp > 95%)
      */
-    public function triThucAI(): BelongsTo
+    public function scopeHopLe($query)
     {
-        return $this->belongsTo(KhoTriThucAI::class, 'MaTriThuc', 'MaTriThuc');
+        return $query->where('TyLeKhop', '>=', 0.95);
     }
 
     /**
-     * Scope: Lấy các phân tích có độ tin cậy cao (>= 0.8)
+     * Scope: Lấy các phân tích cảnh báo (80-95%)
      */
-    public function scopeDoTinCayCao($query)
+    public function scopeCanhBao($query)
     {
-        return $query->where('DoTinCay', '>=', 0.8);
+        return $query->whereBetween('TyLeKhop', [0.8, 0.95]);
     }
 
     /**
-     * Scope: Lấy các phân tích có độ tin cậy trung bình (0.5 - 0.8)
+     * Scope: Lấy các phân tích cần thẩm định (< 80%)
      */
-    public function scopeDoTinCayTrungBinh($query)
+    public function scopeCanThamDinh($query)
     {
-        return $query->whereBetween('DoTinCay', [0.5, 0.8]);
-    }
-
-    /**
-     * Scope: Lấy các phân tích có độ tin cậy thấp (< 0.5)
-     */
-    public function scopeDoTinCayThap($query)
-    {
-        return $query->where('DoTinCay', '<', 0.5);
+        return $query->where('TyLeKhop', '<', 0.8);
     }
 }

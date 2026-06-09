@@ -51,4 +51,10 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // DELETE /api/ho-so/{maHoSo}/minh-chung/{maMinhChung} - Xóa minh chứng
     Route::delete('/ho-so/{maHoSo}/minh-chung/{maMinhChung}', [HoSoController::class, 'deleteMinhChung']);
+
+    // ==================== OCR & AUTO-COMPARISON (DAY 3) ====================
+    // POST /api/ho-so/{maHoSo}/process-ocr - Kích hoạt xử lý OCR (Gemini Vision + Auto-Comparison)
+    // Body: { "process_all": false }
+    // Response: { "success": true, "analysis_results": [...] }
+    Route::post('/ho-so/{maHoSo}/process-ocr', [HoSoController::class, 'processOcr']);
 });
