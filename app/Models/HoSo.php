@@ -27,6 +27,7 @@ class HoSo extends Model
         'MaTrangThai',
         'GhiChu',
         'LyDoTuChoi',
+        'du_lieu_form',
     ];
 
     protected function casts(): array
@@ -34,6 +35,7 @@ class HoSo extends Model
         return [
             'NgayNop' => 'datetime',
             'NgayCapNhat' => 'datetime',
+            'du_lieu_form' => 'array',
         ];
     }
 
