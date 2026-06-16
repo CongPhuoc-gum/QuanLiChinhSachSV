@@ -120,6 +120,13 @@ class HoSoController extends Controller
                     'ma_nguoi_dung' => $user->MaNguoiDung
                 ]);
 
+                // 5.1 TẠO GIAI ĐOẠN XÉT DUYỆT ĐẦU TIÊN (Khoa xác nhận)
+                \App\Models\HoSoApprovalStage::create([
+                    'MaHoSo' => $hoSo->MaHoSo,
+                    'GiaiDoan' => 1,  // Stage 1: Chờ Khoa xác nhận
+                    'TrangThai' => 0,  // Chưa xử lý
+                ]);
+
                 // 6. UPLOAD MINH CHỨNG CLOUDINARY
                 $minhChungFolder = 'quanlics/minh_chung/' . date('Y/m/d') . '/' . $hoSo->MaHoSo;
                 $uploadedMinhChungs = [];

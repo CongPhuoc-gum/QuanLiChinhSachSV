@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 
 namespace App\Services;
 
@@ -48,6 +48,17 @@ class GeminiService
             // 1. Đọc file ngữ cảnh Nghị định 81
             $knowledgeBase = $this->loadKnowledgeBase();
 
+            // If knowledge base is missing, return a polite fallback answer instead of throwing
+            if (empty(trim($knowledgeBase))) {
+                return [
+                    'success' => true,
+                    'answer' => 'Xin lỗi, dữ liệu Nghị định 81/2021 chưa được tải lên hệ thống. Vui lòng liên hệ quản trị để cập nhật tài liệu trước khi sử dụng chức năng tư vấn AI.',
+                    'citations' => [],
+                    'tokens_used' => 0,
+                    'timestamp' => now()
+                ];
+            }
+
             // 2. Xây dựng System Prompt với ngữ cảnh
             $systemPrompt = $this->buildSystemPromptWithKB($knowledgeBase);
 
@@ -67,12 +78,82 @@ class GeminiService
                 'trace' => $e->getTraceAsString()
             ]);
 
+            // If KB is available, attempt a simple local KB-based answer as fallback
+            if (!empty(trim($knowledgeBase))) {
+                try {
+                    $local = $this->localKbAnswer($userQuestion, $knowledgeBase);
+                    if ($local['success']) {
+                        return $local;
+                    }
+                } catch (Exception $ex) {
+                    Log::warning('GeminiService::localKbAnswer failed: ' . $ex->getMessage());
+                }
+            }
+
             return [
                 'success' => false,
                 'message' => 'Xin lỗi, hệ thống AI gặp sự cố. Vui lòng thử lại sau.',
                 'error' => $e->getMessage()
             ];
         }
+    }
+
+    /**
+     * Simple local KB search fallback: tries to find relevant lines in the KB
+     * and returns them as a short answer with any detected citations.
+     */
+    private function localKbAnswer(string $question, string $kb): array
+    {
+        // Normalize
+        $q = mb_strtolower(strip_tags($question));
+
+        // Extract keyword tokens (words with length >=3)
+        $tokens = preg_split('/[^\p{L}0-9]+/u', $q);
+        $tokens = array_filter(array_map('trim', $tokens), function ($t) {
+            return mb_strlen($t) >= 3;
+        });
+
+        if (empty($tokens)) {
+            return ['success' => false];
+        }
+
+        // Search KB lines for matches
+        $lines = preg_split('/\r?\n/', $kb);
+        $matches = [];
+        foreach ($lines as $line) {
+            $low = mb_strtolower($line);
+            foreach ($tokens as $tok) {
+                if (mb_stripos($low, $tok) !== false) {
+                    $matches[] = trim($line);
+                    break;
+                }
+            }
+            if (count($matches) >= 6)
+                break;  // limit
+        }
+
+        if (empty($matches)) {
+            // If nothing matched, explicitly say not found in KB
+            return [
+                'success' => true,
+                'answer' => 'Thông tin này không có trong Nghị định 81/2021.',
+                'citations' => [],
+                'tokens_used' => 0,
+                'timestamp' => now()
+            ];
+        }
+
+        $snippet = implode(' ', array_slice($matches, 0, 6));
+        preg_match_all('/Điều\s+\d+/u', $snippet, $m);
+        $citations = array_unique($m[0] ?? []);
+
+        return [
+            'success' => true,
+            'answer' => $snippet,
+            'citations' => $citations,
+            'tokens_used' => 0,
+            'timestamp' => now()
+        ];
     }
 
     /**
@@ -129,7 +210,9 @@ class GeminiService
         $kbPath = env('AI_KB_PATH', 'ai/nghidinh81.txt');
 
         if (!Storage::disk('local')->exists($kbPath)) {
-            throw new Exception("Knowledge base file not found at: {$kbPath}");
+            Log::warning("GeminiService::loadKnowledgeBase - Knowledge base file not found at: {$kbPath}");
+            // Return empty string to allow the service to decide on a graceful fallback
+            return '';
         }
 
         $content = Storage::disk('local')->get($kbPath);
@@ -167,6 +250,11 @@ class GeminiService
             - Câu trả lời chính: [Trích dẫn Điều/Khoản] + [Giải thích rõ ràng]
             - Mẫu ứng dụng: [Nếu có] VD sinh viên hộ nghèo được miễn 100% học phí
             - Liên hệ: [Nếu cần] Vui lòng liên hệ phòng CTSV trường để xác nhận chi tiết
+
+            HƯỚNG DẪN THÊM CHO PHONG CÁCH TRẢ LỜI:
+            - Trả lời ngắn gọn (1-2 câu). Nếu có câu trả lời chính xác trong KIẾN THỨC CƠ SỞ, hãy TRÍCH DẪN NGAY "Điều X" trong câu trả lời.
+            - KHÔNG TƯỞNG TƯỢNG hoặc SUY DIỄN vượt quá nội dung của KIẾN THỨC CƠ SỞ. Nếu không tìm thấy, trả: "Thông tin này không có trong Nghị định 81/2021."
+            - Luôn trả bằng TIẾNG VIỆT.
 
             ---
             PROMPT;

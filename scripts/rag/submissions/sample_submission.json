@@ -1,0 +1,16 @@
+{
+  "student_id": "SV2026001",
+  "name": "Nguyễn Văn A",
+  "dob": "2005-04-15",
+  "declared_object": "Đối tượng 2",
+  "residence": {
+    "address": "Xã A, Huyện B, Tỉnh C",
+    "is_disadvantaged": false
+  },
+  "uploaded_files": [
+    "quyet_dinh_tro_cap_ho_giay_xac_nhan_mo_coi.pdf",
+    "don_de_nghi_mien_giam.pdf",
+    "don_cam_ket.pdf"
+  ],
+  "notes": "Sinh viên mồ côi cả cha lẫn mẹ, đang hưởng trợ cấp xã hội"
+}
