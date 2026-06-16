@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\SinhVien;
+use App\Services\LocationCascadingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -55,23 +56,59 @@ class ProfileController extends Controller
     /**
      * PUT /api/profile
      * Cập nhật thông tin profile của sinh viên
-     * Fields cho phép sửa: dien_thoai, dia_chi_tam_tru, so_tai_khoan_ngan_hang, ten_ngan_hang
+     *
+     * Address cascading: Chọn thành phố → quận huyện → xã phường → nhập số nh�
+     *
+     * Fields cho phép sửa:
+     * - dien_thoai
+     * - dia_chi_tam_tru + tinh_tam_tru (địa chỉ tạm trú)
+     * - province_code, district_code, ward_code, address (cascading address)
      */
     public function update(Request $request)
     {
         try {
             $user = Auth::user();
             $sinhVien = SinhVien::findOrFail($user->MaNguoiDung);
+            $locationService = new LocationCascadingService();
 
             // Validate
             $validated = $request->validate([
                 'dien_thoai' => 'nullable|regex:/^0[0-9]{9}$/',
                 'dia_chi_tam_tru' => 'nullable|string|max:255',
                 'tinh_tam_tru' => 'nullable|string|max:100',
+                // Cascading address
+                'province_code' => 'nullable|string|size:2',
+                'district_code' => 'nullable|string|size:3',
+                'ward_code' => 'nullable|string|size:3',
+                'address' => 'nullable|string|max:255',
             ], [
                 'dien_thoai.regex' => 'Số điện thoại phải có định dạng 0XXXXXXXXX',
                 'dia_chi_tam_tru.max' => 'Địa chỉ tạm trú không vượt quá 255 ký tự',
             ]);
+
+            // Nếu có địa chỉ cascading, validate nó
+            if ($request->filled('province_code')) {
+                $locationData = [
+                    'province_code' => $request->input('province_code'),
+                    'district_code' => $request->input('district_code'),
+                    'ward_code' => $request->input('ward_code'),
+                    'address' => $request->input('address'),
+                ];
+
+                $locationValidation = $locationService->validateLocation($locationData);
+                if (!$locationValidation['valid']) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => $locationValidation['message'],
+                    ], 422);
+                }
+
+                // Build full address string
+                $fullAddress = $locationService->buildFullAddress($locationData);
+                $validated['dia_chi_tam_tru'] = $fullAddress;
+                $validated['tinh_tam_tru'] = collect($locationService->getProvinces())
+                    ->firstWhere('code', $request->input('province_code'))['name'] ?? '';
+            }
 
             // Update SinhVien
             $sinhVien->update([

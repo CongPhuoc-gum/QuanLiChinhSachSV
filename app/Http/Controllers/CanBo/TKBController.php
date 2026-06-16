@@ -182,6 +182,71 @@ class TKBController extends Controller
     }
 
     /**
+     * GET /api/can-bo/tkb/{maSoSV}/kiem-tra-no
+     * Kiểm tra có nợ môn hay không (sinh viên quên học phía trước)
+     *
+     * Logic: Nếu sinh viên có học môn này trong năm học trước nhưng IsHocLai=1
+     * thì có khả năng học lại (nợ) môn đó
+     */
+    public function checkDebtMon($maSoSV, Request $request)
+    {
+        try {
+            $sinhVien = SinhVien::where('MaSoSV', $maSoSV)->firstOrFail();
+
+            $request->validate([
+                'hoc_ky_hien_tai' => 'required|integer|min:1',
+                'nam_hoc_hien_tai' => 'required|string',
+            ]);
+
+            $hocKyHienTai = $request->input('hoc_ky_hien_tai');
+            $namHocHienTai = $request->input('nam_hoc_hien_tai');
+
+            // Lấy tất cả môn học của SV
+            $allMonHoc = LichSuTKB::where('MaSinhVien', $sinhVien->MaNguoiDung)
+                ->orderBy('NamHoc', 'asc')
+                ->orderBy('HocKy', 'asc')
+                ->get();
+
+            // Phân tích: Nợ = Môn học lại
+            $monHocNo = $allMonHoc->filter(function ($mon) {
+                return $mon->IsHocLai == 1;
+            })->map(function ($mon) {
+                return [
+                    'ma_mon_hoc' => $mon->MaMonHoc,
+                    'ten_mon_hoc' => $mon->TenMonHoc,
+                    'so_tin_chi' => $mon->SoTinChi,
+                    'hoc_ky_hoc_lai' => $mon->HocKy,
+                    'nam_hoc_hoc_lai' => $mon->NamHoc,
+                ];
+            })->values();
+
+            $coNo = count($monHocNo) > 0;
+            $tongTinChiNo = collect($monHocNo)->sum('so_tin_chi');
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'ma_so_sv' => $maSoSV,
+                    'ho_ten' => $sinhVien->HoTen,
+                    'co_no' => $coNo,
+                    'tong_tin_chi_no' => $tongTinChiNo,
+                    'mon_hoc_no' => $monHocNo,
+                    'ghi_chu' => $coNo
+                        ? "Sinh viên có nợ {$tongTinChiNo} tín chỉ ({$monHocNo->count()} môn). Cần phải học lại những môn này."
+                        : 'Sinh viên không có nợ môn.',
+                ],
+                'message' => 'Kiểm tra nợ môn thành công'
+            ], 200);
+        } catch (\Exception $e) {
+            \Log::error('Error in TKBController@checkDebtMon', ['error' => $e->getMessage()]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Lỗi khi kiểm tra nợ môn'
+            ], 500);
+        }
+    }
+
+    /**
      * Helper: Ghi log hệ thống
      */
     private function logSystemAction($user, $action, $detail = null)

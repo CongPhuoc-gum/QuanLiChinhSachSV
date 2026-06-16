@@ -2,30 +2,27 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Model;
 
 /**
- * Khoa Model
- * 
- * Danh mục Khoa của trường
+ * Khoa Model - Bộ phận của trường (Khoa Sư Phạm, Khoa Kỹ Thuật, v.v.)
  */
 class Khoa extends Model
 {
     public $timestamps = false;
     protected $primaryKey = 'MaKhoa';
-    protected $keyType = 'string';
-    public $incrementing = false;
     protected $table = 'KHOA';
+
     protected $fillable = [
-        'MaKhoa',
         'TenKhoa',
+        'MoTa',
     ];
 
     /**
      * Relationship: Một khoa có nhiều lớp
      */
-    public function danhMucLops(): HasMany
+    public function lops(): HasMany
     {
         return $this->hasMany(DanhMucLop::class, 'MaKhoa', 'MaKhoa');
     }

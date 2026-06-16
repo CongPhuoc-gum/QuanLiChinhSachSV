@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Schema;
 use Exception;
 
 /**
@@ -24,6 +25,25 @@ use Exception;
  */
 class DangKyHocPhanController extends Controller
 {
+    /**
+     * Return the user identifier column used in DANG_KY_HOC_PHAN table.
+     */
+    private function userColumn(): string
+    {
+        return Schema::hasColumn('DANG_KY_HOC_PHAN', 'MaNguoiDung') ? 'MaNguoiDung' : 'MaSinhVien';
+    }
+
+    /**
+     * Return the current user's identifier value that matches userColumn().
+     */
+    private function userIdentifier($user)
+    {
+        if ($this->userColumn() === 'MaNguoiDung') {
+            return $user->MaNguoiDung;
+        }
+
+        return $user->sinhVien?->MaSoSV ?? $user->MaNguoiDung;
+    }
     /**
      * GET /api/dang-ky-hoc-phan/lop-mo
      *
@@ -127,17 +147,17 @@ class DangKyHocPhanController extends Controller
             $data = $lopHocPhans->map(function ($lop) use ($user) {
                 // Check if student already registered this class
                 $daDangKy = DangKyHocPhan::where('MaTKB', $lop->MaTKB)
-                    ->where('MaNguoiDung', $user->MaNguoiDung)
+                    ->where($this->userColumn(), $this->userIdentifier($user))
                     ->exists();
 
                 // Check if student took this course in previous semester (isHocLai)
                 $isHocLai = false;
                 $previousSemester = $this->getPreviousSemester($lop);
                 if ($previousSemester) {
-                    $hocTruocDay = LichSuTKB::where('MaHP', $lop->MaHP)
+                        $hocTruocDay = LichSuTKB::where('MaHP', $lop->MaHP)
                         ->where('MaNamHoc', $previousSemester['MaNamHoc'])
                         ->whereHas('dangKyHocPhans', function ($q) use ($user) {
-                            $q->where('MaNguoiDung', $user->MaNguoiDung);
+                            $q->where($this->userColumn(), $this->userIdentifier($user));
                         })
                         ->exists();
 
@@ -254,7 +274,7 @@ class DangKyHocPhanController extends Controller
 
                         // Check if already registered
                         $existsReg = DangKyHocPhan::where('MaTKB', $maLopId)
-                            ->where('MaNguoiDung', $user->MaNguoiDung)
+                            ->where($this->userColumn(), $this->userIdentifier($user))
                             ->exists();
 
                         if ($existsReg) {
@@ -272,20 +292,22 @@ class DangKyHocPhanController extends Controller
                             $hocTruocDay = LichSuTKB::where('MaHP', $lop->MaHP)
                                 ->where('MaNamHoc', $previousSemester['MaNamHoc'])
                                 ->whereHas('dangKyHocPhans', function ($q) use ($user) {
-                                    $q->where('MaNguoiDung', $user->MaNguoiDung);
-                                })
+                                        $q->where($this->userColumn(), $this->userIdentifier($user));
+                                    })
                                 ->exists();
 
                             $isHocLai = $hocTruocDay;
                         }
 
-                        // Create registration
-                        DangKyHocPhan::create([
+                        // Create registration (set correct user column)
+                        $createData = [
                             'MaTKB' => $maLopId,
-                            'MaNguoiDung' => $user->MaNguoiDung,
                             'IsHocLai' => $isHocLai ? 1 : 0,
                             'NguonNhap' => 'sinh_vien_tu_chon',
-                        ]);
+                        ];
+                        $createData[$this->userColumn()] = $this->userIdentifier($user);
+
+                        DangKyHocPhan::create($createData);
 
                         $daDangKy[] = [
                             'ma_mon_hoc' => $lop->MaHP,
@@ -369,86 +391,85 @@ class DangKyHocPhanController extends Controller
      *   "message": "Danh sách môn đã đăng ký"
      * }
      */
-    public function cuaToi(Request $request)
+   public function cuaToi(Request $request)
     {
         try {
             $user = Auth::user();
-            $maSinhVien = $user->sinhVien?->MaSoSV;
-
-            if (!$maSinhVien) {
+            if (!$user) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Người dùng không phải là sinh viên'
-                ], 403);
+                    'message' => 'Phiên đăng nhập không hợp lệ hoặc đã hết hạn.'
+                ], 401);
             }
 
-            $query = DangKyHocPhan::where('MaNguoiDung', $user->MaNguoiDung)
-                ->with(['lichSuTKB.hocPhan', 'lichSuTKB.namHoc']);
+            // Lọc chính xác theo cột phù hợp trong bảng DANG_KY_HOC_PHAN
+            // Một số môi trường dùng `MaNguoiDung`, một số dùng `MaSinhVien`.
+            // Kiểm tra tồn tại cột để tránh SQL errors.
 
-            // Optional filters
-            if ($request->has('hoc_ky')) {
+            if (Schema::hasColumn('DANG_KY_HOC_PHAN', 'MaNguoiDung')) {
+                $query = DangKyHocPhan::where('MaNguoiDung', $user->MaNguoiDung);
+            } else {
+                $maSinhVien = $user->sinhVien?->MaSoSV ?? $user->MaNguoiDung;
+                $query = DangKyHocPhan::where('MaSinhVien', $maSinhVien);
+            }
+
+            // Sửa lỗi logic 500: Lọc theo Học Kỳ
+            if ($request->filled('hoc_ky')) {
                 $hocKy = $request->input('hoc_ky');
                 $query->whereHas('lichSuTKB.namHoc', function ($q) use ($hocKy) {
                     $q->where('HocKy', $hocKy);
                 });
             }
 
-            if ($request->has('nam_hoc')) {
+            // Sửa lỗi logic 500: Lọc theo Năm Học (Bọc nhóm toán tử orWhere bằng Closure để tránh gãy SQL)
+            if ($request->filled('nam_hoc')) {
                 $namHoc = $request->input('nam_hoc');
                 $query->whereHas('lichSuTKB.namHoc', function ($q) use ($namHoc) {
-                    $q->where('TenNamHoc', $namHoc);
+                    $q->where(function ($innerQuery) use ($namHoc) {
+                        $innerQuery->where('TenNamHoc', $namHoc)
+                                   ->orWhere('MaNamHoc', $namHoc);
+                    });
                 });
             }
 
-            // Paginate
-            $perPage = min((int) $request->input('per_page', 20), 100);
-            $dkHocPhans = $query->orderBy('NgayDangKy', 'desc')->paginate($perPage);
+            // Eager load tối ưu hóa quan hệ dữ liệu
+            $listDangKy = $query->with(['lichSuTKB.hocPhan', 'lichSuTKB.namHoc'])->get();
 
-            // Format response
-            $data = $dkHocPhans->map(function ($dk) {
-                $ghiChu = '';
-                if ($dk->IsHocLai) {
-                    $ghiChu = 'Môn này không được tính miễn giảm HP';
-                }
+            // Format dữ liệu và sử dụng toán tử điều kiện tránh lỗi gọi thuộc tính trên Object Null
+            $formattedData = $listDangKy->map(function ($dk) {
+                $tkb = $dk->lichSuTKB;
+                $hocPhan = $tkb ? $tkb->hocPhan : null;
 
                 return [
-                    'ma_lop_hoc_phan' => $dk->lichSuTKB->MaTKB,
-                    'ma_mon_hoc' => $dk->lichSuTKB->MaHP,
-                    'ten_mon_hoc' => $dk->lichSuTKB->hocPhan?->TenHP ?? 'N/A',
-                    'so_tin_chi' => $dk->lichSuTKB->hocPhan?->SoTinChi ?? 0,
-                    'giang_vien' => $dk->lichSuTKB->GiangVien ?? 'N/A',
-                    'is_hoc_lai' => (bool) $dk->IsHocLai,
-                    'hoc_ky' => $dk->lichSuTKB->namHoc?->HocKy ?? 'N/A',
-                    'nam_hoc' => $dk->lichSuTKB->namHoc?->TenNamHoc ?? 'N/A',
-                    'ghi_chu' => $ghiChu,
+                    'MaTKB' => $dk->MaTKB,
+                    'TenLHP' => $tkb ? ($tkb->TenLHP ?: ($hocPhan ? $hocPhan->TenHP : 'Môn học chưa xếp lớp')) : 'N/A',
+                    'Thu' => $tkb ? $tkb->Thu : '?',
+                    'TuTiet' => $tkb ? $tkb->TuTiet : 0,
+                    'DenTiet' => $tkb ? $tkb->DenTiet : 0,
+                    'Phong' => $tkb ? $tkb->Phong : 'N/A',
+                    'GiangVien' => $tkb ? $tkb->GiangVien : 'Chưa phân công',
+                    'SoTinChi' => $hocPhan ? $hocPhan->SoTinChi : 0,
+                    'IsHocLai' => (bool)$dk->IsHocLai,
+                    'HocKy' => ($tkb && $tkb->namHoc) ? $tkb->namHoc->HocKy : 'N/A',
+                    'TenNamHoc' => ($tkb && $tkb->namHoc) ? $tkb->namHoc->TenNamHoc : 'N/A',
                 ];
             });
 
-            Log::info('DangKyHocPhanController::cuaToi - Listed registered courses', [
-                'ma_sinh_vien' => $maSinhVien
-            ]);
-
             return response()->json([
                 'success' => true,
-                'data' => $data,
-                'pagination' => [
-                    'total' => $dkHocPhans->total(),
-                    'per_page' => $dkHocPhans->perPage(),
-                    'current_page' => $dkHocPhans->currentPage(),
-                    'last_page' => $dkHocPhans->lastPage(),
-                ],
-                'message' => 'Danh sách môn đã đăng ký'
+                'data' => $formattedData,
+                'message' => 'Tải danh sách đăng ký học phần thành công.'
             ], 200);
-        } catch (Exception $e) {
-            Log::error('DangKyHocPhanController::cuaToi - Error: ' . $e->getMessage());
 
+        } catch (\Exception $e) {
+            Log::error('CRASH_API_CUA_TOI_DANGKY: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
-                'message' => 'Lỗi xử lý yêu cầu'
+                'message' => 'Lỗi máy chủ khi xử lý danh sách học phần.',
+                'error_debug' => $e->getMessage()
             ], 500);
         }
     }
-
     /**
      * DELETE /api/dang-ky-hoc-phan/{maLichSuTKB}
      *
@@ -477,7 +498,7 @@ class DangKyHocPhanController extends Controller
 
             // Find registration
             $dk = DangKyHocPhan::where('MaTKB', $maTKB)
-                ->where('MaNguoiDung', $user->MaNguoiDung)
+                ->where($this->userColumn(), $this->userIdentifier($user))
                 ->with('lichSuTKB')
                 ->firstOrFail();
 

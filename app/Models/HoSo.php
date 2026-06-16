@@ -120,6 +120,14 @@ class HoSo extends Model
     }
 
     /**
+     * Relationship: Một hồ sơ có nhiều giai đoạn xét duyệt
+     */
+    public function approvalStages(): HasMany
+    {
+        return $this->hasMany(HoSoApprovalStage::class, 'MaHoSo', 'MaHoSo');
+    }
+
+    /**
      * Scope: Lấy các hồ sơ chờ thẩm định
      */
     public function scopeChoThamDinh($query)

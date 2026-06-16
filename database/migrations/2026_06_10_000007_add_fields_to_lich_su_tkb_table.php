@@ -9,13 +9,10 @@ return new class extends Migration {
     {
         Schema::table('LICH_SU_TKB', function (Blueprint $table) {
             if (!Schema::hasColumn('LICH_SU_TKB', 'MaLopHocPhan')) {
-                $table->unsignedBigInteger('MaLopHocPhan')->nullable()->after('MaLichSuTKB');
+                $table->unsignedBigInteger('MaLopHocPhan')->nullable();
             }
             if (!Schema::hasColumn('LICH_SU_TKB', 'NguonNhap')) {
-                $table
-                    ->enum('NguonNhap', ['can_bo_import', 'sinh_vien_tu_chon'])
-                    ->default('can_bo_import')
-                    ->after('IsHocLai');
+                $table->enum('NguonNhap', ['can_bo_import', 'sinh_vien_tu_chon'])->default('can_bo_import');
             }
         });
     }

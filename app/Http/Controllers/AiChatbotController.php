@@ -8,6 +8,7 @@ use App\Services\GeminiService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 
 class AiChatbotController extends Controller
 {
@@ -43,15 +44,158 @@ class AiChatbotController extends Controller
     public function ask(Request $request)
     {
         try {
-            // Validate input
+            // Validate only phien_id here; accept flexible input keys for question
             $request->validate([
-                'question' => 'required|string|min:5|max:500',
                 'phien_id' => 'nullable|integer|exists:phien_chat_ai,MaPhien'
             ]);
 
             $user = Auth::user();
-            $userQuestion = trim($request->input('question'));
+
+            // Accept multiple possible keys from frontend: question, message, text, content, input
+            $rawQuestion = null;
+            foreach (['question', 'message', 'text', 'content', 'input'] as $k) {
+                if ($request->filled($k)) {
+                    $rawQuestion = $request->input($k);
+                    break;
+                }
+            }
+
+            $rawQuestion = $rawQuestion !== null ? trim((string)$rawQuestion) : '';
+
+            if ($rawQuestion === '') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Dữ liệu đầu vào không hợp lệ: thiếu câu hỏi'
+                ], 422);
+            }
+
+            // Remove common greetings at start (e.g. "hi", "hello", "xin chào", "chào", "hey", "alo")
+            $normalized = preg_replace('/^(?:\s*(?:hi|hello|hey|xin chào|chào|alo)[\s,!:.-]*)+/iu', '', $rawQuestion);
+            $normalized = trim((string)$normalized);
+
+            // If after stripping greetings nothing remains, ask client to provide question content
+            if ($normalized === '') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Vui lòng nhập nội dung câu hỏi sau lời chào.'
+                ], 422);
+            }
+
+            // Keep the normalized question as the actual question text
+            $userQuestion = $normalized;
             $phienId = $request->input('phien_id');
+
+            // 0. Local QA / keyword-based quick answers (check before calling Gemini)
+            try {
+                $qaPath = env('AI_QA_PATH', 'ai/qa_pairs.json');
+                if (Storage::disk('local')->exists($qaPath)) {
+                    $qaJson = Storage::disk('local')->get($qaPath);
+                    $qaList = json_decode($qaJson, true) ?? [];
+                    foreach ($qaList as $entry) {
+                        $entryQuestion = isset($entry['question']) ? mb_strtolower($entry['question']) : '';
+                        $keywords = $entry['keywords'] ?? [];
+
+                        $matched = false;
+                        // keyword match
+                        foreach ($keywords as $kw) {
+                            if ($kw !== '' && mb_stripos(mb_strtolower($userQuestion), mb_strtolower($kw)) !== false) {
+                                $matched = true;
+                                break;
+                            }
+                        }
+
+                        // direct substring match on question template
+                        if (!$matched && $entryQuestion !== '' && mb_stripos(mb_strtolower($userQuestion), $entryQuestion) !== false) {
+                            $matched = true;
+                        }
+
+                        if ($matched) {
+                            // create or use existing phien
+                            if (!$phienId) {
+                                $phien = PhienChatAI::create([
+                                    'MaNguoiDung' => Auth::user()->MaNguoiDung,
+                                    'ThoiGianBatDau' => now()
+                                ]);
+                                $phienId = $phien->MaPhien;
+                            }
+
+                            // save user message
+                            $tinNhanUser = TinNhanAI::create([
+                                'MaPhien' => $phienId,
+                                'VaiTro' => 'user',
+                                'NoiDung' => $userQuestion,
+                                'ThoiGian' => now(),
+                                'TokenSuDung' => 0
+                            ]);
+
+                            // save assistant canned answer
+                            $assistantAnswer = $entry['answer'] ?? 'Thông tin không tìm thấy.';
+                            $tinNhanAssistant = TinNhanAI::create([
+                                'MaPhien' => $phienId,
+                                'VaiTro' => 'assistant',
+                                'NoiDung' => $assistantAnswer,
+                                'ThoiGian' => now(),
+                                'TokenSuDung' => 0
+                            ]);
+
+                            return response()->json([
+                                'success' => true,
+                                'phien_id' => $phienId,
+                                'tin_nhan_user_id' => $tinNhanUser->MaTinNhan,
+                                'tin_nhan_assistant_id' => $tinNhanAssistant->MaTinNhan,
+                                'question' => $userQuestion,
+                                'answer' => $assistantAnswer,
+                                'citations' => $entry['citations'] ?? [],
+                                'tokens_used' => 0,
+                                'timestamp' => now()->toIso8601String()
+                            ], 200);
+                        }
+                    }
+                }
+            } catch (\Exception $e) {
+                Log::warning('AiChatbotController::ask - QA local check failed: ' . $e->getMessage());
+            }
+
+            // Quick keyword-based canonical answers for critical legal cases
+            $lq = mb_strtolower($userQuestion);
+            if (mb_stripos($lq, 'liệt sĩ') !== false || mb_stripos($lq, 'thương binh') !== false) {
+                if (!$phienId) {
+                    $phien = PhienChatAI::create([
+                        'MaNguoiDung' => Auth::user()->MaNguoiDung,
+                        'ThoiGianBatDau' => now()
+                    ]);
+                    $phienId = $phien->MaPhien;
+                }
+
+                $tinNhanUser = TinNhanAI::create([
+                    'MaPhien' => $phienId,
+                    'VaiTro' => 'user',
+                    'NoiDung' => $userQuestion,
+                    'ThoiGian' => now(),
+                    'TokenSuDung' => 0
+                ]);
+
+                $assistantAnswer = 'Theo Điều 3, con liệt sĩ và con thương binh được miễn 100% học phí.';
+                $tinNhanAssistant = TinNhanAI::create([
+                    'MaPhien' => $phienId,
+                    'VaiTro' => 'assistant',
+                    'NoiDung' => $assistantAnswer,
+                    'ThoiGian' => now(),
+                    'TokenSuDung' => 0
+                ]);
+
+                return response()->json([
+                    'success' => true,
+                    'phien_id' => $phienId,
+                    'tin_nhan_user_id' => $tinNhanUser->MaTinNhan,
+                    'tin_nhan_assistant_id' => $tinNhanAssistant->MaTinNhan,
+                    'question' => $userQuestion,
+                    'answer' => $assistantAnswer,
+                    'citations' => ['Điều 3'],
+                    'tokens_used' => 0,
+                    'timestamp' => now()->toIso8601String()
+                ], 200);
+            }
 
             // 1. Tạo hoặc lấy phiên chat
             if (!$phienId) {
