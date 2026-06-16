@@ -37,6 +37,13 @@ class RAGFlowTest extends TestCase
         $this->mockVectorSearch = Mockery::mock(VectorSearchService::class);
         $this->mockGeneration = Mockery::mock(GenerationService::class);
 
+        // Set default expectations for VectorSearchService
+        $this
+            ->mockVectorSearch
+            ->shouldReceive('isHealthy')
+            ->andReturn(true)
+            ->byDefault();
+
         $this->pipeline = new RAGPipelineService(
             cacheService: $this->mockCache,
             vectorSearchService: $this->mockVectorSearch,
@@ -78,9 +85,13 @@ class RAGFlowTest extends TestCase
             ->mockVectorSearch
             ->shouldNotReceive('search');
 
-        // Config check should pass
-        $config = $this->pipeline->getConfiguration();
-        $this->assertIsArray($config);
+        // Call ask to trigger cache lookup
+        $result = $this->pipeline->ask($question);
+
+        // Verify result
+        $this->assertTrue($result['success']);
+        $this->assertArrayHasKey('answer', $result);
+        $this->assertArrayHasKey('method', $result);
     }
 
     /**
@@ -117,8 +128,12 @@ class RAGFlowTest extends TestCase
             ->andReturn('Con thương binh được hỗ trợ 1.5 triệu đồng hàng tháng')
             ->once();
 
-        $config = $this->pipeline->getConfiguration();
-        $this->assertIsArray($config);
+        // Call ask to trigger flow
+        $result = $this->pipeline->ask($question);
+
+        // Verify result
+        $this->assertTrue($result['success']);
+        $this->assertArrayHasKey('answer', $result);
     }
 
     /**
@@ -143,15 +158,12 @@ class RAGFlowTest extends TestCase
             ->andReturn([])
             ->once();
 
-        // Generation should still be called (with empty context)
-        $this
-            ->mockGeneration
-            ->shouldReceive('generate')
-            ->andReturn('Tôi không tìm thấy thông tin liên quan trong cơ sở dữ liệu.')
-            ->once();
+        // Call ask to trigger flow
+        $result = $this->pipeline->ask($question);
 
-        $config = $this->pipeline->getConfiguration();
-        $this->assertIsArray($config);
+        // Verify result
+        $this->assertTrue($result['success']);
+        $this->assertArrayHasKey('answer', $result);
     }
 
     /**
@@ -364,10 +376,12 @@ class RAGFlowTest extends TestCase
             ->andReturn('Theo Điều 3 của Nghị định 81/2021, hộ nghèo được miễn 100% học phí.')
             ->once();
 
-        // Verify pipeline works
-        $health = $this->pipeline->getHealthStatus();
-        $this->assertIsArray($health);
+        // Call ask to verify pipeline works
+        $result = $this->pipeline->ask($question);
+        $this->assertTrue($result['success']);
+        $this->assertArrayHasKey('answer', $result);
 
+        // Verify pipeline configuration
         $config = $this->pipeline->getConfiguration();
         $this->assertIsArray($config);
         $this->assertArrayHasKey('vector_search_topk', $config);
@@ -473,6 +487,13 @@ class RAGFlowTest extends TestCase
      */
     public function test_health_status_before_flow(): void
     {
+        // Ensure isHealthy() has expectations set
+        $this
+            ->mockVectorSearch
+            ->shouldReceive('isHealthy')
+            ->andReturn(true)
+            ->once();
+
         $health = $this->pipeline->getHealthStatus();
 
         $this->assertIsArray($health);
